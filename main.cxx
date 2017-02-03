@@ -75,12 +75,12 @@ public:
 
 	bool InitialPointcloud()
 	{
-		if (BoundaryPolynormalGenerator == NULL)
-		{
-			std::cerr << "cannot find BoundaryPolynormalGenerator" << std::endl;
-			return false;
-		}
-		vtkFloatArray* BoundaryNormalArray = vtkFloatArray::SafeDownCast(BoundaryPolynormalGenerator->GetOutput()->GetPointData()->GetArray("Normals"));
+		//if (BoundaryPolynormalGenerator == NULL)
+		//{
+		//	std::cerr << "cannot find BoundaryPolynormalGenerator" << std::endl;
+		//	return false;
+		//}
+		//vtkFloatArray* BoundaryNormalArray = vtkFloatArray::SafeDownCast(BoundaryPolynormalGenerator->GetOutput()->GetPointData()->GetArray("Normals"));
 		if (BoundaryNormalArray == NULL)
 		{
 			std::cerr << "cannot find BoundaryNormalArray" << std::endl;
@@ -123,12 +123,12 @@ public:
 
 	bool UniformRedistribution(int iterationnumber)
 	{
-		if (BoundaryPolynormalGenerator == NULL)
-		{
-			std::cerr << "cannot find BoundaryPolynormalGenerator" << std::endl;
-			return false;
-		}
-		vtkFloatArray* BoundaryNormalArray = vtkFloatArray::SafeDownCast(BoundaryPolynormalGenerator->GetOutput()->GetPointData()->GetArray("Normals"));
+		//if (BoundaryPolynormalGenerator == NULL)
+		//{
+		//	std::cerr << "cannot find BoundaryPolynormalGenerator" << std::endl;
+		//	return false;
+		//}
+		//vtkFloatArray* BoundaryNormalArray = vtkFloatArray::SafeDownCast(BoundaryPolynormalGenerator->GetOutput()->GetPointData()->GetArray("Normals"));
 		if (BoundaryNormalArray == NULL)
 		{
 			std::cerr << "cannot find BoundaryNormalArray" << std::endl;
@@ -147,16 +147,29 @@ public:
 				double Fi_c[3] = { 0.0, 0.0, 0.0 };
 				double Fi_p[3] = { 0.0, 0.0, 0.0 };
 
+				
 				// force between center and this point
 				{
 					vtkIdType nearestboundaryPID = boundarypointLocator->FindClosestPoint(coordi);
+					vtkSmartPointer<vtkIdList> NeighorboundaryIds = vtkSmartPointer<vtkIdList>::New();
+					//pointLocator->FindPointsWithinRadius(4.0, coordi, NeighorpIds);
+					boundarypointLocator->FindClosestNPoints(5, coordi, NeighorboundaryIds);
+
 					double boundarycoord[3];
 					BoundaryPoly->GetPoint(nearestboundaryPID, boundarycoord);
 					double dir_p2boundary[3];
 					vtkMath::Subtract(boundarycoord, coordi, dir_p2boundary);
 					vtkMath::Normalize(dir_p2boundary);
-					double boundarynormal[3];
-					BoundaryNormalArray->GetTuple(nearestboundaryPID, boundarynormal);
+					double boundarynormal[3] = {0.0, 0.0, 0.0};
+					for (int idxj = 0; idxj < NeighorboundaryIds->GetNumberOfIds(); idxj++)
+					{
+						vtkIdType j = NeighorboundaryIds->GetId(idxj);
+						double boundarynormalj[3];
+						BoundaryNormalArray->GetTuple(j, boundarynormalj);
+						vtkMath::Add(boundarynormal, boundarynormalj, boundarynormal);
+					}
+					vtkMath::Normalize(boundarynormal);
+					//BoundaryNormalArray->GetTuple(nearestboundaryPID, boundarynormal);
 
 					double F_mode_c = 0.0;
 					if (vtkMath::Dot(dir_p2boundary, boundarynormal) > 0)
@@ -170,6 +183,7 @@ public:
 				// force between points
 				double Fpi_abssum = 0.0;
 				double Fpi_sumabs = 0.0;
+
 				vtkSmartPointer<vtkIdList> NeighorpIds = vtkSmartPointer<vtkIdList>::New();
 				//pointLocator->FindPointsWithinRadius(4.0, coordi, NeighorpIds);
 				pointLocator->FindClosestNPoints(10, coordi, NeighorpIds);
@@ -381,12 +395,12 @@ public:
 		if (RelaxShape == NULL)
 			return false;
 
-		if (BoundaryPolynormalGenerator == NULL)
-		{
-			std::cerr << "cannot find BoundaryPolynormalGenerator" << std::endl;
-			return false;
-		}
-		vtkFloatArray* BoundaryNormalArray = vtkFloatArray::SafeDownCast(BoundaryPolynormalGenerator->GetOutput()->GetPointData()->GetArray("Normals"));
+		//if (BoundaryPolynormalGenerator == NULL)
+		//{
+		//	std::cerr << "cannot find BoundaryPolynormalGenerator" << std::endl;
+		//	return false;
+		//}
+		//vtkFloatArray* BoundaryNormalArray = vtkFloatArray::SafeDownCast(BoundaryPolynormalGenerator->GetOutput()->GetPointData()->GetArray("Normals"));
 		if (BoundaryNormalArray == NULL)
 		{
 			std::cerr << "cannot find BoundaryNormalArray" << std::endl;
@@ -899,7 +913,7 @@ public:
 			BoundaryPoly->Modified();
 			renderWindow->Render();
 
-			BoundaryPolynormalGenerator->Update();
+			// BoundaryPolynormalGenerator->Update();
 
 			for (int i = 0; i < ControlPointCoord->GetNumberOfTuples(); i++)
 			{
@@ -966,7 +980,7 @@ public:
 			if (this->PickedBoundaryPID == -1)
 				return;
 
-			vtkFloatArray* BoundaryNormalArray = vtkFloatArray::SafeDownCast(BoundaryPolynormalGenerator->GetOutput()->GetPointData()->GetArray("Normals"));
+		//	vtkFloatArray* BoundaryNormalArray = vtkFloatArray::SafeDownCast(BoundaryPolynormalGenerator->GetOutput()->GetPointData()->GetArray("Normals"));
 			if (BoundaryNormalArray == NULL)
 			{
 				std::cerr << "cannot find BoundaryNormalArray" << std::endl;
@@ -1034,6 +1048,16 @@ public:
 				}
 
 				std::swap(lastpickpos, pickpos);
+
+				//forces.resize(SamplePoly->GetPoints()->GetNumberOfPoints());
+				//for (int iter = 0; iter < 10; iter++)
+				//{
+				//	DeformationMotion(1, 2);
+				//}
+				//connectionCellArray->Modified();
+				//connectionPolyData->Modified();
+				//SamplePoly->Modified();
+				//renderWindow->Render();
 			}
 		}
 
@@ -1105,6 +1129,7 @@ public:
 	vtkPolyData* BoundaryPoly;
 	vtkPointLocator* boundarypointLocator;	
 	vtkSmartPointer<vtkPolyDataNormals> BoundaryPolynormalGenerator;
+	vtkFloatArray* BoundaryNormalArray;
 
 	// p
 	vtkPointLocator* pointLocator;
@@ -1159,7 +1184,65 @@ int main(int argc, char *argv[])
 	sphereSource->SetThetaResolution(60);
 	sphereSource->Update();
 	vtkSmartPointer<vtkPolyData> BoundaryPoly = vtkSmartPointer<vtkPolyData>::New();
-	BoundaryPoly = sphereSource->GetOutput();
+	
+	vtkSmartPointer< vtkXMLPolyDataReader > reader = vtkSmartPointer< vtkXMLPolyDataReader >::New();
+	reader->SetFileName("C:\\work\\Lung_Models\\FMA7333.vtp");
+	try
+	{
+		reader->Update();
+	}
+	catch (...)
+	{
+		std::cerr << "Error occurs when reading" << std::endl;
+		return 0;
+	}
+
+//	BoundaryPoly->DeepCopy(reader->GetOutput());
+
+	vtkSmartPointer<vtkTriangleFilter> trianglefilter = vtkSmartPointer<vtkTriangleFilter>::New();
+	trianglefilter->SetInputData(reader->GetOutput());
+	trianglefilter->Update();
+
+	vtkSmartPointer<vtkCleanPolyData> cleanPolyData = vtkSmartPointer<vtkCleanPolyData>::New();
+	cleanPolyData->SetInputData(trianglefilter->GetOutput());
+	cleanPolyData->Update();
+	BoundaryPoly->DeepCopy(cleanPolyData->GetOutput());
+
+	double* BoundaryBounds = BoundaryPoly->GetBounds();	
+	double BoundaryScaleX = BoundaryBounds[1] - BoundaryBounds[0];
+	double BoundaryScaleY = BoundaryBounds[3] - BoundaryBounds[2];
+	double BoundaryScaleZ = BoundaryBounds[5] - BoundaryBounds[4];
+	double BoundaryScale = vtkMath::Max(BoundaryScaleX, BoundaryScaleY);
+	BoundaryScale = vtkMath::Max(BoundaryScale, BoundaryScaleZ);
+	double BoundaryCenter[3];
+	for (int l = 0; l < 3; l++)
+	{
+		BoundaryCenter[l] = 0.5 * (BoundaryBounds[2 * l] + BoundaryBounds[2 * l + 1]);
+	}
+
+	// change scale from BoundaryScale to 2*CRADIUS, change center from BoundaryCenter to [0,0,0]
+	for (int i = 0; i < BoundaryPoly->GetPoints()->GetNumberOfPoints(); i++)
+	{
+		double coord_old[3];
+		BoundaryPoly->GetPoint(i, coord_old);
+		double dir2center[3];
+		vtkMath::Subtract(coord_old, BoundaryCenter, dir2center);
+
+		double coord_new[3];
+		for (int l = 0; l < 3; l++)
+			coord_new[l] = 0.0 + 2.0 * CRADIUS / BoundaryScale * dir2center[l];
+		BoundaryPoly->GetPoints()->SetPoint(i, coord_new);
+	}
+
+	SavePolyData(BoundaryPoly, "C:\\work\\smooth_deformation_3D\\testdata\\lungboundarypoly1.vtp");
+//	smoothvtkpolydata(BoundaryPoly, 50);
+
+	vtkSmartPointer<vtkLoopSubdivisionFilter> loopsubdivisionfilter = vtkSmartPointer<vtkLoopSubdivisionFilter>::New();
+	loopsubdivisionfilter->SetInputData(BoundaryPoly);
+	loopsubdivisionfilter->SetNumberOfSubdivisions(1);
+	loopsubdivisionfilter->Update();
+	BoundaryPoly = loopsubdivisionfilter->GetOutput();
+
 
 	vtkSmartPointer<vtkPolyDataNormals> BoundaryPolynormalGenerator = vtkSmartPointer<vtkPolyDataNormals>::New();
 	BoundaryPolynormalGenerator->SetInputData(BoundaryPoly);
@@ -1168,11 +1251,17 @@ int main(int argc, char *argv[])
 	BoundaryPolynormalGenerator->AutoOrientNormalsOn();
 	BoundaryPolynormalGenerator->Update();
 	vtkFloatArray* BoundaryNormalArray = vtkFloatArray::SafeDownCast(BoundaryPolynormalGenerator->GetOutput()->GetPointData()->GetArray("Normals"));
+	//vtkFloatArray* BoundaryNormalArray = vtkFloatArray::SafeDownCast(BoundaryPoly->GetPointData()->GetArray("Normals"));
+
+	BoundaryPoly->GetPointData()->SetNormals(BoundaryNormalArray);
+	SavePolyData(BoundaryPoly, "C:\\work\\smooth_deformation_3D\\testdata\\lungboundarypoly2.vtp");
+
 	if (BoundaryNormalArray == NULL)
 	{
 		std::cerr << "cannot find BoundaryNormalArray" << std::endl;
 		return false;
 	}
+	
 
 	vtkSmartPointer<vtkPointLocator> boundarypointLocator = vtkSmartPointer<vtkPointLocator>::New();
 	boundarypointLocator->SetDataSet(BoundaryPoly);
@@ -1249,7 +1338,6 @@ int main(int argc, char *argv[])
 	lookupTable->SetTableValue(2, 0.0, 1.0, 0.0, 1); 
 	lookupTable->Build();
 
-
 	vtkSmartPointer<vtkPointLocator> pointLocator = vtkSmartPointer<vtkPointLocator>::New();
 	pointLocator->SetDataSet(SamplePoly);
 	pointLocator->AutomaticOn();
@@ -1296,7 +1384,7 @@ int main(int argc, char *argv[])
 
 	// Render window
 	vtkSmartPointer<vtkRenderWindow> renderWindow =	vtkSmartPointer<vtkRenderWindow>::New();
-	renderWindow->SetSize(200* 1,200); //(width, height)
+//	renderWindow->SetSize(200* 1,200); //(width, height)
 	vtkSmartPointer<vtkRenderWindowInteractor> renderWindowInteractor =	vtkSmartPointer<vtkRenderWindowInteractor>::New();
 	renderWindowInteractor->SetRenderWindow(renderWindow);
 
@@ -1311,20 +1399,21 @@ int main(int argc, char *argv[])
 	actor->SetMapper(mapper);
 	actor->GetProperty()->SetColor(1.0, 0.0, 0.0); //(R,G,B)
 	actor->GetProperty()->SetPointSize(5.0);
-
 	renderer->AddActor(actor);
 
-	vtkSmartPointer<vtkPolyDataMapper> mapper1 = vtkSmartPointer<vtkPolyDataMapper>::New(); // the boundary ball
+	// the boundary ball
+	vtkSmartPointer<vtkPolyDataMapper> mapper1 = vtkSmartPointer<vtkPolyDataMapper>::New();
 	mapper1->SetInputData(BoundaryPoly);
 	vtkSmartPointer<vtkActor> actor1 = vtkSmartPointer<vtkActor>::New();
 	actor1->SetMapper(mapper1);
 	actor1->GetProperty()->SetColor(0.0, 0.0, 1.0); //(R,G,B)
-	actor1->GetProperty()->SetOpacity(0.10);
+	actor1->GetProperty()->SetOpacity(0.1);
 	actor1->GetProperty()->SetDiffuse(1);
 	actor1->GetProperty()->SetSpecular(1);
 	renderer->AddActor(actor1);
 
-	vtkSmartPointer<vtkPolyDataMapper> mapper2 = vtkSmartPointer<vtkPolyDataMapper>::New(); // the connections
+	// the connections
+	vtkSmartPointer<vtkPolyDataMapper> mapper2 = vtkSmartPointer<vtkPolyDataMapper>::New(); 
 	mapper2->SetInputData(connectionPolyData);
 	//mapper2->SetScalarRange(0.0, 1.0);
 	//mapper2->SetLookupTable(connectionslookupTable);
@@ -1369,7 +1458,8 @@ int main(int argc, char *argv[])
 	vtkSmartPointer<MouseInteractorStyle> style = vtkSmartPointer<MouseInteractorStyle>::New();
 	style->BoundaryPoly = BoundaryPoly;
 	style->boundarypointLocator = boundarypointLocator;
-	style->BoundaryPolynormalGenerator = BoundaryPolynormalGenerator;
+//	style->BoundaryPolynormalGenerator = BoundaryPolynormalGenerator;
+	style->BoundaryNormalArray = BoundaryNormalArray;
 
 	style->pointLocator = pointLocator;
 
