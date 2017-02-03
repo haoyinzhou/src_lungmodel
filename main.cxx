@@ -935,7 +935,7 @@ public:
 		if (this->Pick(lastpickpos))
 		{
 			this->LeftButtonDown = true;
-			this->PickedBoundaryPID = boundarypointLocator->FindClosestPointWithinRadius(4.0, lastpickpos, this->pickboundarydistance);
+			this->PickedBoundaryPID = boundarypointLocator->FindClosestPointWithinRadius(1.0, lastpickpos, this->pickboundarydistance);
 			this->PickedSamplePID = pointLocator->FindClosestPointWithinRadius(1.0, lastpickpos, this->picksampledistance);
 		}
 	}
@@ -961,7 +961,7 @@ public:
 		if (this->LeftButtonDown == false)
 			return;
 
-		if (this->Interactor->GetControlKey() == true)
+		if (this->Interactor->GetControlKey() != false)
 		{
 			if (this->PickedBoundaryPID == -1)
 				return;
@@ -980,7 +980,7 @@ public:
 
 				double move[3];
 				vtkMath::Subtract(pickpos, lastpickpos, move);
-
+						
 				double boundarynormal[3];
 				BoundaryNormalArray->GetTuple(this->PickedBoundaryPID, boundarynormal);
 				double moveproj = vtkMath::Dot(move, boundarynormal);
@@ -990,7 +990,7 @@ public:
 				BoundaryPoly->GetPoint(this->PickedBoundaryPID, PickedBoundaryCoord);
 
 				vtkSmartPointer<vtkIdList> NeighorpIds = vtkSmartPointer<vtkIdList>::New();
-				boundarypointLocator->FindPointsWithinRadius(20.0, PickedBoundaryCoord, NeighorpIds);
+				boundarypointLocator->FindPointsWithinRadius(10.0, PickedBoundaryCoord, NeighorpIds);
 
 				for (int idxj = 0; idxj < NeighorpIds->GetNumberOfIds(); idxj++)
 				{
@@ -1035,7 +1035,6 @@ public:
 
 				std::swap(lastpickpos, pickpos);
 			}
-			return;
 		}
 
 		if (this->Interactor->GetShiftKey() != false)
