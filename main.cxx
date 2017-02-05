@@ -146,17 +146,16 @@ public:
 				double Fi[3] = { 0.0, 0.0, 0.0 };
 				double Fi_c[3] = { 0.0, 0.0, 0.0 };
 				double Fi_p[3] = { 0.0, 0.0, 0.0 };
-
-				
+								
 				// force between center and this point
 				{
-					vtkIdType nearestboundaryPID = boundarypointLocator->FindClosestPoint(coordi);
+					//vtkIdType nearestboundaryPID = boundarypointLocator->FindClosestPoint(coordi);
 					vtkSmartPointer<vtkIdList> NeighorboundaryIds = vtkSmartPointer<vtkIdList>::New();
 					//pointLocator->FindPointsWithinRadius(4.0, coordi, NeighorpIds);
 					boundarypointLocator->FindClosestNPoints(5, coordi, NeighorboundaryIds);
 
 					double boundarycoord[3];
-					BoundaryPoly->GetPoint(nearestboundaryPID, boundarycoord);
+					BoundaryPoly->GetPoint(NeighorboundaryIds->GetId(0), boundarycoord);
 					double dir_p2boundary[3];
 					vtkMath::Subtract(boundarycoord, coordi, dir_p2boundary);
 					vtkMath::Normalize(dir_p2boundary);
@@ -169,7 +168,6 @@ public:
 						vtkMath::Add(boundarynormal, boundarynormalj, boundarynormal);
 					}
 					vtkMath::Normalize(boundarynormal);
-					//BoundaryNormalArray->GetTuple(nearestboundaryPID, boundarynormal);
 
 					double F_mode_c = 0.0;
 					if (vtkMath::Dot(dir_p2boundary, boundarynormal) > 0)
@@ -229,7 +227,7 @@ public:
 					for (int l = 0; l < 3; l++) Fi[l] = 20.0 * Fi[l];
 				}
 				
-				if (isControlPoint->GetValue(i) != 2) // if it is not a J-bar control point
+				if (isControlPoint->GetValue(i) != 2) // if it is not a tumor surface point
 				{
 					double coordi_new[3];
 					for (int l = 0; l < 3; l++) coordi_new[l] = coordi[l] + Fi[l] / POINTMASS * TIMESTEP;
@@ -244,6 +242,12 @@ public:
 			//double meanR = CRADIUS * CRADIUS / SamplePoints->GetNumberOfPoints();
 			for (int i = 0; i < SamplePoly->GetPoints()->GetNumberOfPoints(); i++)
 			{
+				if (isControlPoint->GetValue(i) == 2) // if this is a tumor surface point
+				{
+					R->SetValue(i, 0.1);
+					continue;
+				}
+
 				double Ri = R->GetValue(i);
 				double delta_Ri_Max = 3.0 * TIMESTEP;
 
@@ -470,7 +474,7 @@ public:
 					C[j] = new double[3];
 				}
 
-				vtkMath::MultiplyMatrix(RelaxShape_local_T, CurrentShape_local, 3, Connections[i].size(), Connections[i].size(), 3, C);
+				vtkMath::MultiplyMatrix(RelaxShape_local_T, CurrentShape_local, 3, (unsigned int)Connections[i].size(), (unsigned int)Connections[i].size(), 3, C);
 				double A[3][3];
 				memcpy(&A[0][0], &C[0][0], 3 * sizeof(double));
 				memcpy(&A[1][0], &C[1][0], 3 * sizeof(double));
@@ -495,7 +499,7 @@ public:
 					RelaxShape_local_rot[j] = new double[3];
 				}
 				
-				vtkMath::MultiplyMatrix(RelaxShape_local, rot, Connections[i].size(), 3, 3, 3, RelaxShape_local_rot);
+				vtkMath::MultiplyMatrix(RelaxShape_local, rot, (unsigned int)Connections[i].size(), 3, 3, 3, RelaxShape_local_rot);
 				
 				// calculate force sent from i
 				for (unsigned int j = 0; j < Connections[i].size(); j++)
@@ -514,11 +518,15 @@ public:
 					double force_i2pidnorm = 5.0 * dis2goal * dis2goal;
 					//force_i2pidnorm = force_i2pidnorm > 10.0 ? 10.0 : force_i2pidnorm;
 
-					if (isControlPoint->GetValue(i) == 1) // Surface point will have a much larger force to its connections
-						force_i2pidnorm = 5.0 * force_i2pidnorm;
+				//	if (isControlPoint->GetValue(i) == 1) // Surface point will have a much larger force to its connections
+				//		force_i2pidnorm = 5.0 * force_i2pidnorm;
+				//	if (isControlPoint->GetValue(i) == 2) // Jbar point will have a much larger force to its connections
+				//		force_i2pidnorm = 20.0 * force_i2pidnorm;
 
-					if (isControlPoint->GetValue(i) == 2) // Jbar point will have a much larger force to its connections
-						force_i2pidnorm = 20.0 * force_i2pidnorm;
+					if (isControlPoint->GetValue(i) == 2 && isControlPoint->GetValue(pid) == 2) // forces betwwn two tumor points are strong
+					{
+						force_i2pidnorm = 10.0 * force_i2pidnorm;
+					}
 
 					for (int l = 0; l < 3; l++)	force_i2pid[l] = force_i2pidnorm * dir2goal[l];
 
@@ -583,9 +591,9 @@ public:
 			//	}
 			//}
 
+			// move points according to forces
 			for (int i = 0; i < SamplePoly->GetPoints()->GetNumberOfPoints(); i++)
 			{
-				// move points according to forces
 				if (isControlPoint->GetValue(i) == controltag1
 					|| isControlPoint->GetValue(i) == controltag2)
 				{
@@ -601,11 +609,15 @@ public:
 
 					double Fi[3];
 					double force_i2pidnorm = 50 * dis2goal;
-					force_i2pidnorm = force_i2pidnorm > 50.0 ? 50.0 : force_i2pidnorm;
+				//	force_i2pidnorm = force_i2pidnorm > 50.0 ? 50.0 : force_i2pidnorm;
 					for (int l = 0; l < 3; l++)	Fi[l] = force_i2pidnorm * dir2goal[l];
 
 					double coordnew[3];
-					for (int l = 0; l < 3; l++) coordnew[l] = CurrentCoord[l] + Fi[l] / POINTMASS * TIMESTEP;
+					if (isControlPoint->GetValue(i) != 2)
+						for (int l = 0; l < 3; l++) coordnew[l] = CurrentCoord[l] + Fi[l] / POINTMASS * TIMESTEP;
+					else
+						for (int l = 0; l < 3; l++) coordnew[l] = CurrentCoord[l] + Fi[l] / 1.0 * TIMESTEP;
+
 					SamplePoly->GetPoints()->SetPoint(i, coordnew);
 				}
 				else
@@ -615,23 +627,25 @@ public:
 					Fi[1] = forces[i].y;
 					Fi[2] = forces[i].z;
 
-					if (vtkMath::Norm(Fi) > 50.0)
-					{
-						vtkMath::Normalize(Fi);
-						vtkMath::MultiplyScalar(Fi, 50.0);
-					}
+					//if (vtkMath::Norm(Fi) > 50.0)
+					//{
+					//	vtkMath::Normalize(Fi);
+					//	vtkMath::MultiplyScalar(Fi, 50.0);
+					//}
 
 					double coordi[3];
 					SamplePoly->GetPoint(i, coordi);
 					for (int l = 0; l < 3; l++) coordi[l] = coordi[l] + Fi[l] / POINTMASS * TIMESTEP;
 					SamplePoly->GetPoints()->SetPoint(i, coordi);
-				}
+
+					if (isControlPoint->GetValue(i) == 2) // if this is a tumor surface point
+					{
+						vtkIdType relatedtumorpid = RelatedTumorPids.at(i);
+						tumorPoly->GetPoints()->SetPoint(relatedtumorpid, coordi);
+					}
+				}				
 			}
-		
-			//connectionCellArray->Modified();
-			//connectionPolyData->Modified();
-			//SamplePoly->Modified();
-			//renderWindow->Render();
+
 		}
 	
 		return true;
@@ -820,6 +834,7 @@ public:
 				connectionCellArray->Modified();
 				connectionPolyData->Modified();
 				SamplePoly->Modified();
+//				tumorPoly->Modified();
 				renderWindow->Render();
 
 				RelaxShape->DeepCopy(SamplePoly->GetPoints());
@@ -830,9 +845,9 @@ public:
 		else if (key == "g")
 		{
 			forces.resize(SamplePoly->GetPoints()->GetNumberOfPoints());
-			for (int iter = 0; iter < 5; iter++)
+			for (int iter = 0; iter < 1; iter++)
 			{
-				DeformationMotion(1, 2);
+				DeformationMotion(1, -1);
 			}
 
 			//const double cubestep = CUBESTEP;
@@ -845,6 +860,8 @@ public:
 			connectionCellArray->Modified();
 			connectionPolyData->Modified();
 			SamplePoly->Modified();
+			tumorPoly->Modified();
+
 			renderWindow->Render();
 
 			//	BuildRelationshipsParameters();
@@ -949,8 +966,9 @@ public:
 		if (this->Pick(lastpickpos))
 		{
 			this->LeftButtonDown = true;
-			this->PickedBoundaryPID = boundarypointLocator->FindClosestPointWithinRadius(1.0, lastpickpos, this->pickboundarydistance);
-			this->PickedSamplePID = pointLocator->FindClosestPointWithinRadius(1.0, lastpickpos, this->picksampledistance);
+			this->PickedBoundaryPID = boundarypointLocator->FindClosestPointWithinRadius(2.0, lastpickpos, this->pickboundarydistance);
+			this->PickedSamplePID = pointLocator->FindClosestPointWithinRadius(2.0, lastpickpos, this->picksampledistance);
+		//	std::cout << "this->PickedBoundaryPID = " << this->PickedBoundaryPID << std::endl;
 		}
 	}
 
@@ -989,16 +1007,18 @@ public:
 
 			if (Pick(pickpos))
 			{
-				if (this->pickboundarydistance > 1.0)
-					return;
-
+				//if (this->pickboundarydistance > 5.0)
+				//{
+				//	std::cout << "this->pickboundarydistance > 5.0" << std::endl;
+				//	return;
+				//}
 				double move[3];
 				vtkMath::Subtract(pickpos, lastpickpos, move);
 						
-				double boundarynormal[3];
-				BoundaryNormalArray->GetTuple(this->PickedBoundaryPID, boundarynormal);
-				double moveproj = vtkMath::Dot(move, boundarynormal);
-				for (int l = 0; l < 3; l++) move[l] = moveproj * boundarynormal[l];
+				//double boundarynormal[3];
+				//BoundaryNormalArray->GetTuple(this->PickedBoundaryPID, boundarynormal);
+				//double moveproj = vtkMath::Dot(move, boundarynormal);
+				//for (int l = 0; l < 3; l++) move[l] = moveproj * boundarynormal[l];
 
 				double PickedBoundaryCoord[3];
 				BoundaryPoly->GetPoint(this->PickedBoundaryPID, PickedBoundaryCoord);
@@ -1014,16 +1034,16 @@ public:
 					double boundarynormalj[3];
 					BoundaryNormalArray->GetTuple(j, boundarynormalj);
 
-					if (vtkMath::Dot(boundarynormal, boundarynormalj) < 0.0)
-						continue;
+					//if (vtkMath::Dot(boundarynormal, boundarynormalj) < 0.0)
+					//	continue;
 
 					double dis = sqrt(vtkMath::Distance2BetweenPoints(coordj, PickedBoundaryCoord));
 					double w = exp(-0.2 * (dis * dis));
 					double wmove[3];
 					for (int l = 0; l < 3; l++) wmove[l] = w * move[l];
 
-					double moveprojj = vtkMath::Dot(wmove, boundarynormalj);
-					for (int l = 0; l < 3; l++) wmove[l] = moveprojj * boundarynormalj[l];
+					//double moveprojj = vtkMath::Dot(wmove, boundarynormalj);
+					//for (int l = 0; l < 3; l++) wmove[l] = moveprojj * boundarynormalj[l];
 
 					vtkMath::Add(coordj, wmove, coordj);
 					BoundaryPoly->GetPoints()->SetPoint(j, coordj);
@@ -1142,6 +1162,7 @@ public:
 	vtkSmartPointer<vtkIdTypeArray> isControlPoint;
 	vtkSmartPointer<vtkDoubleArray> ControlPointCoord;
 	vector<vtkIdType> RelatedBoundaryPids;
+	vector<vtkIdType> RelatedTumorPids;
 
 	vector< vector<vtkIdType> > Connections;
 //	vector< vector<vtkIdType> > relationships; // each one has two points ids.
@@ -1171,6 +1192,7 @@ public:
 	vtkSphereSource* TumorSphereSource;;
 	vtkIdType TumorCenterIdx[3];
 
+	vtkPolyData* tumorPoly;
 };
 vtkStandardNewMacro(MouseInteractorStyle);
 
@@ -1184,65 +1206,56 @@ int main(int argc, char *argv[])
 	sphereSource->SetThetaResolution(60);
 	sphereSource->Update();
 	vtkSmartPointer<vtkPolyData> BoundaryPoly = vtkSmartPointer<vtkPolyData>::New();
-	
-	vtkSmartPointer< vtkXMLPolyDataReader > reader = vtkSmartPointer< vtkXMLPolyDataReader >::New();
-	reader->SetFileName("C:\\work\\Lung_Models\\FMA7333.vtp");
-	try
+	vtkSmartPointer<vtkTransform> Boundarytranslation = vtkSmartPointer<vtkTransform>::New();
+	vtkSmartPointer<vtkTransformPolyDataFilter> BoundaryTransformFilter = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
+
 	{
-		reader->Update();
+		vtkSmartPointer< vtkXMLPolyDataReader > reader = vtkSmartPointer< vtkXMLPolyDataReader >::New();
+		reader->SetFileName("C:\\work\\Lung_Models\\FMA7333.vtp");
+		try
+		{
+			reader->Update();
+		}
+		catch (...)
+		{
+			std::cerr << "Error occurs when reading" << std::endl;
+			return 0;
+		}
+
+		//	BoundaryPoly->DeepCopy(reader->GetOutput());
+
+		vtkSmartPointer<vtkTriangleFilter> trianglefilter = vtkSmartPointer<vtkTriangleFilter>::New();
+		trianglefilter->SetInputData(reader->GetOutput());
+		trianglefilter->Update();
+
+		vtkSmartPointer<vtkCleanPolyData> cleanPolyData = vtkSmartPointer<vtkCleanPolyData>::New();
+		cleanPolyData->SetInputData(trianglefilter->GetOutput());
+		cleanPolyData->Update();
+		BoundaryPoly->DeepCopy(cleanPolyData->GetOutput());
+
+		double* BoundaryBounds = BoundaryPoly->GetBounds();
+		double BoundaryScaleX = BoundaryBounds[1] - BoundaryBounds[0];
+		double BoundaryScaleY = BoundaryBounds[3] - BoundaryBounds[2];
+		double BoundaryScaleZ = BoundaryBounds[5] - BoundaryBounds[4];
+		double BoundaryScale = vtkMath::Max(BoundaryScaleX, BoundaryScaleY);
+		BoundaryScale = vtkMath::Max(BoundaryScale, BoundaryScaleZ);
+		double* BoundaryCenter = BoundaryPoly->GetCenter();
+
+		// change scale from BoundaryScale to 2*CRADIUS, change center from BoundaryCenter to [0,0,0]
+		Boundarytranslation->Scale(2 * CRADIUS / BoundaryScale, 2 * CRADIUS / BoundaryScale, 2 * CRADIUS / BoundaryScale);
+		Boundarytranslation->Translate(-BoundaryCenter[0], -BoundaryCenter[1], -BoundaryCenter[2]);
+		BoundaryTransformFilter->SetInputData(BoundaryPoly);
+		BoundaryTransformFilter->SetTransform(Boundarytranslation);
+		BoundaryTransformFilter->Update();
+
+		//	SavePolyData(BoundaryPoly, "C:\\work\\smooth_deformation_3D\\testdata\\lungboundarypoly1.vtp");
+		//	smoothvtkpolydata(BoundaryPoly, 50);
+		vtkSmartPointer<vtkLoopSubdivisionFilter> loopsubdivisionfilter = vtkSmartPointer<vtkLoopSubdivisionFilter>::New();
+		loopsubdivisionfilter->SetInputData(BoundaryTransformFilter->GetOutput());
+		loopsubdivisionfilter->SetNumberOfSubdivisions(1);
+		loopsubdivisionfilter->Update();
+		BoundaryPoly = loopsubdivisionfilter->GetOutput();
 	}
-	catch (...)
-	{
-		std::cerr << "Error occurs when reading" << std::endl;
-		return 0;
-	}
-
-//	BoundaryPoly->DeepCopy(reader->GetOutput());
-
-	vtkSmartPointer<vtkTriangleFilter> trianglefilter = vtkSmartPointer<vtkTriangleFilter>::New();
-	trianglefilter->SetInputData(reader->GetOutput());
-	trianglefilter->Update();
-
-	vtkSmartPointer<vtkCleanPolyData> cleanPolyData = vtkSmartPointer<vtkCleanPolyData>::New();
-	cleanPolyData->SetInputData(trianglefilter->GetOutput());
-	cleanPolyData->Update();
-	BoundaryPoly->DeepCopy(cleanPolyData->GetOutput());
-
-	double* BoundaryBounds = BoundaryPoly->GetBounds();	
-	double BoundaryScaleX = BoundaryBounds[1] - BoundaryBounds[0];
-	double BoundaryScaleY = BoundaryBounds[3] - BoundaryBounds[2];
-	double BoundaryScaleZ = BoundaryBounds[5] - BoundaryBounds[4];
-	double BoundaryScale = vtkMath::Max(BoundaryScaleX, BoundaryScaleY);
-	BoundaryScale = vtkMath::Max(BoundaryScale, BoundaryScaleZ);
-	double BoundaryCenter[3];
-	for (int l = 0; l < 3; l++)
-	{
-		BoundaryCenter[l] = 0.5 * (BoundaryBounds[2 * l] + BoundaryBounds[2 * l + 1]);
-	}
-
-	// change scale from BoundaryScale to 2*CRADIUS, change center from BoundaryCenter to [0,0,0]
-	for (int i = 0; i < BoundaryPoly->GetPoints()->GetNumberOfPoints(); i++)
-	{
-		double coord_old[3];
-		BoundaryPoly->GetPoint(i, coord_old);
-		double dir2center[3];
-		vtkMath::Subtract(coord_old, BoundaryCenter, dir2center);
-
-		double coord_new[3];
-		for (int l = 0; l < 3; l++)
-			coord_new[l] = 0.0 + 2.0 * CRADIUS / BoundaryScale * dir2center[l];
-		BoundaryPoly->GetPoints()->SetPoint(i, coord_new);
-	}
-
-	SavePolyData(BoundaryPoly, "C:\\work\\smooth_deformation_3D\\testdata\\lungboundarypoly1.vtp");
-//	smoothvtkpolydata(BoundaryPoly, 50);
-
-	vtkSmartPointer<vtkLoopSubdivisionFilter> loopsubdivisionfilter = vtkSmartPointer<vtkLoopSubdivisionFilter>::New();
-	loopsubdivisionfilter->SetInputData(BoundaryPoly);
-	loopsubdivisionfilter->SetNumberOfSubdivisions(1);
-	loopsubdivisionfilter->Update();
-	BoundaryPoly = loopsubdivisionfilter->GetOutput();
-
 
 	vtkSmartPointer<vtkPolyDataNormals> BoundaryPolynormalGenerator = vtkSmartPointer<vtkPolyDataNormals>::New();
 	BoundaryPolynormalGenerator->SetInputData(BoundaryPoly);
@@ -1254,15 +1267,14 @@ int main(int argc, char *argv[])
 	//vtkFloatArray* BoundaryNormalArray = vtkFloatArray::SafeDownCast(BoundaryPoly->GetPointData()->GetArray("Normals"));
 
 	BoundaryPoly->GetPointData()->SetNormals(BoundaryNormalArray);
-	SavePolyData(BoundaryPoly, "C:\\work\\smooth_deformation_3D\\testdata\\lungboundarypoly2.vtp");
+//	SavePolyData(BoundaryPoly, "C:\\work\\smooth_deformation_3D\\testdata\\lungboundarypoly2.vtp");
 
 	if (BoundaryNormalArray == NULL)
 	{
 		std::cerr << "cannot find BoundaryNormalArray" << std::endl;
 		return false;
-	}
-	
-
+	}	
+		
 	vtkSmartPointer<vtkPointLocator> boundarypointLocator = vtkSmartPointer<vtkPointLocator>::New();
 	boundarypointLocator->SetDataSet(BoundaryPoly);
 	boundarypointLocator->AutomaticOn();
@@ -1270,7 +1282,11 @@ int main(int argc, char *argv[])
 	boundarypointLocator->BuildLocator();
 	
 	// generate initial SamplePoints
+	vtkSmartPointer<vtkPolyData> SamplePoly = vtkSmartPointer<vtkPolyData>::New();
 	vtkSmartPointer<vtkPoints> SamplePoints = vtkSmartPointer<vtkPoints>::New();
+	vtkSmartPointer<vtkCellArray> SampleCell = vtkSmartPointer<vtkCellArray>::New();
+	SamplePoly->SetPoints(SamplePoints);
+	SamplePoly->SetVerts(SampleCell);
 
 	vtkSmartPointer<vtkIdTypeArray> isControlPoint = vtkSmartPointer<vtkIdTypeArray>::New();
 	isControlPoint->SetName("isControlPoint");
@@ -1281,6 +1297,8 @@ int main(int argc, char *argv[])
 	ControlPointCoord->SetNumberOfComponents(3);
 	ControlPointCoord->SetNumberOfTuples(SamplePoints->GetNumberOfPoints());
 
+	std::vector<vtkIdType> RelatedTumorPids;
+
 	for (int i = 0; i < N; )
 	{
 		double coordi[3] = {0.0, 0.0, 0.0};
@@ -1289,14 +1307,23 @@ int main(int argc, char *argv[])
 		coordi[2] = vtkMath::Random(-CRADIUS, CRADIUS);
 		//	if (vtkMath::Norm(coordi) > CRADIUS) continue;
 		
-		vtkIdType nearestboundaryPID = boundarypointLocator->FindClosestPoint(coordi);
+		vtkSmartPointer<vtkIdList> NeighorboundaryIds = vtkSmartPointer<vtkIdList>::New();
+		boundarypointLocator->FindClosestNPoints(5, coordi, NeighorboundaryIds);
 		double boundarycoord[3];
-		BoundaryPoly->GetPoint(nearestboundaryPID, boundarycoord);
+		BoundaryPoly->GetPoint(NeighorboundaryIds->GetId(0), boundarycoord);
 		double dir_p2boundary[3];
 		vtkMath::Subtract(boundarycoord, coordi, dir_p2boundary);
 		vtkMath::Normalize(dir_p2boundary);
-		double boundarynormal[3];
-		BoundaryNormalArray->GetTuple(nearestboundaryPID, boundarynormal);
+		double boundarynormal[3] = { 0.0, 0.0, 0.0 };
+		for (int idxj = 0; idxj < NeighorboundaryIds->GetNumberOfIds(); idxj++)
+		{
+			vtkIdType j = NeighorboundaryIds->GetId(idxj);
+			double boundarynormalj[3];
+			BoundaryNormalArray->GetTuple(j, boundarynormalj);
+			vtkMath::Add(boundarynormal, boundarynormalj, boundarynormal);
+		}
+		vtkMath::Normalize(boundarynormal);
+
 		if (vtkMath::Dot(dir_p2boundary, boundarynormal) < 0)
 			continue;	
 
@@ -1304,6 +1331,7 @@ int main(int argc, char *argv[])
 		isControlPoint->InsertNextValue(0);
 		double temp[3] = { 0.0, 0.0, 0.0 };
 		ControlPointCoord->InsertNextTuple(temp);
+		RelatedTumorPids.push_back(-1);
 		i ++;
 	}
 	
@@ -1315,18 +1343,70 @@ int main(int argc, char *argv[])
 	//	ControlPointCoord->InsertNextTuple(coord_jbar);
 	//}
 
-	vtkSmartPointer<vtkCellArray> SampleCell = vtkSmartPointer<vtkCellArray>::New();
-	for (vtkIdType i = 0; i < SamplePoints->GetNumberOfPoints(); i ++)
-	{
-		 SampleCell->InsertNextCell( 1, &i );
-	}
-	vtkSmartPointer<vtkPolyData> SamplePoly = vtkSmartPointer<vtkPolyData>::New();
-	SamplePoly->SetPoints(SamplePoints);
-	SamplePoly->SetVerts(SampleCell);
-
 
 //	SavePolyData(SamplePoly, "C:\\work\\smooth_deformation_3D\\testdata\\SamplePoly.vtp");
 	
+	// insert tumor mesh model
+	vtkSmartPointer<vtkPolyData> tumorPoly = vtkSmartPointer<vtkPolyData>::New();
+	vtkSmartPointer<vtkTransform> tumortranslation = vtkSmartPointer<vtkTransform>::New();
+	vtkSmartPointer<vtkTransformPolyDataFilter> tumorTransformFilter = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
+
+	{
+		vtkSmartPointer< vtkXMLPolyDataReader > tumorreader = vtkSmartPointer< vtkXMLPolyDataReader >::New();
+		tumorreader->SetFileName("C:\\work\\Lung_Models\\Tumor.vtp");
+		try
+		{
+			tumorreader->Update();
+		}
+		catch (...)
+		{
+			std::cerr << "Error occurs when reading" << std::endl;
+			return 0;
+		}
+		vtkSmartPointer<vtkTriangleFilter> trianglefilter = vtkSmartPointer<vtkTriangleFilter>::New();
+		trianglefilter->SetInputData(tumorreader->GetOutput());
+		trianglefilter->Update();
+
+		vtkSmartPointer<vtkCleanPolyData> cleanPolyData = vtkSmartPointer<vtkCleanPolyData>::New();
+		cleanPolyData->SetInputData(trianglefilter->GetOutput());
+		cleanPolyData->Update();
+		tumorPoly = cleanPolyData->GetOutput();
+
+		double* tumorBounds = tumorPoly->GetBounds();
+		double tumorScaleX = tumorBounds[1] - tumorBounds[0];
+		double tumorScaleY = tumorBounds[3] - tumorBounds[2];
+		double tumorScaleZ = tumorBounds[5] - tumorBounds[4];
+		double tumorScale = vtkMath::Max(tumorScaleX, tumorScaleY);
+		tumorScale = vtkMath::Max(tumorScale, tumorScaleZ);
+		double* tumorCenter = tumorPoly->GetCenter();
+
+		// change scale from tumorScale totumorgoalscale, change center from tumorCenter to [0,0,0]
+		const double tumorgoalscale = 1.0;
+		tumortranslation->Scale(tumorgoalscale / tumorScale, tumorgoalscale / tumorScale, tumorgoalscale / tumorScale);
+		tumortranslation->Translate(10.0-tumorCenter[0], -tumorCenter[1], 25.0-tumorCenter[2]);
+		tumorTransformFilter->SetInputData(tumorPoly);
+		tumorTransformFilter->SetTransform(tumortranslation);
+		tumorTransformFilter->Update();
+		tumorPoly = tumorTransformFilter->GetOutput();
+
+	//	SavePolyData(tumorTransformFilter->GetOutput(), "C:\\work\\smooth_deformation_3D\\testdata\\tumorTransformFilter.vtp");
+		
+		for (vtkIdType i = 0; i < tumorPoly->GetPoints()->GetNumberOfPoints(); i++)
+		{
+			double coordi[3];
+			tumorPoly->GetPoint(i, coordi);
+			SamplePoints->InsertNextPoint(coordi);
+			isControlPoint->InsertNextValue(2);
+			ControlPointCoord->InsertNextTuple(coordi);
+			RelatedTumorPids.push_back(i);
+		}
+	}
+
+	for (vtkIdType i = 0; i < SamplePoints->GetNumberOfPoints(); i++)
+	{
+		SampleCell->InsertNextCell(1, &i);
+	}
+
 	// add color lookup table
 	SamplePoly->GetCellData()->SetScalars(isControlPoint);
 	vtkSmartPointer<vtkLookupTable> lookupTable = vtkSmartPointer<vtkLookupTable>::New();
@@ -1341,7 +1421,7 @@ int main(int argc, char *argv[])
 	vtkSmartPointer<vtkPointLocator> pointLocator = vtkSmartPointer<vtkPointLocator>::New();
 	pointLocator->SetDataSet(SamplePoly);
 	pointLocator->AutomaticOn();
-	pointLocator->SetNumberOfPointsPerBucket(1);
+	pointLocator->SetNumberOfPointsPerBucket(5);
 	pointLocator->BuildLocator();
 	
 	vtkSmartPointer<vtkDoubleArray> R = vtkSmartPointer<vtkDoubleArray>::New(); // radius
@@ -1401,7 +1481,7 @@ int main(int argc, char *argv[])
 	actor->GetProperty()->SetPointSize(5.0);
 	renderer->AddActor(actor);
 
-	// the boundary ball
+	// the boundary lung model
 	vtkSmartPointer<vtkPolyDataMapper> mapper1 = vtkSmartPointer<vtkPolyDataMapper>::New();
 	mapper1->SetInputData(BoundaryPoly);
 	vtkSmartPointer<vtkActor> actor1 = vtkSmartPointer<vtkActor>::New();
@@ -1435,13 +1515,14 @@ int main(int argc, char *argv[])
 	//TumorSphereSource->SetPhiResolution(12);
 	//TumorSphereSource->SetThetaResolution(12);
 	//TumorSphereSource->Update();
-	//vtkSmartPointer<vtkPolyDataMapper> mapper_tumor = vtkSmartPointer<vtkPolyDataMapper>::New(); // the tumor sphere
-	//mapper_tumor->SetInputConnection(TumorSphereSource->GetOutputPort());
-	//vtkSmartPointer<vtkActor> actor_tumor = vtkSmartPointer<vtkActor>::New();
-	//actor_tumor->SetMapper(mapper_tumor);
-	//actor_tumor->GetProperty()->SetColor(0.0, 1.0, 0.0); //(R,G,B)
-	////	actor2->GetProperty()->SetOpacity(0.5);
-	////renderer->AddActor(actor_tumor);
+
+	vtkSmartPointer<vtkPolyDataMapper> mapper_tumor = vtkSmartPointer<vtkPolyDataMapper>::New(); // the tumor sphere
+	mapper_tumor->SetInputData(tumorPoly);
+	vtkSmartPointer<vtkActor> actor_tumor = vtkSmartPointer<vtkActor>::New();
+	actor_tumor->SetMapper(mapper_tumor);
+	actor_tumor->GetProperty()->SetColor(0.0, 1.0, 0.0); //(R,G,B)
+	//	actor_tumor->GetProperty()->SetOpacity(0.5);
+	renderer->AddActor(actor_tumor);
 
 
 	renderer->SetBackground(1.0, 1.0, 1.0);
@@ -1452,7 +1533,7 @@ int main(int argc, char *argv[])
 	renderWindow->SetWindowName("Show Smoothed Points");
 
 	vtkSmartPointer<vtkPointPicker> pointPicker = vtkSmartPointer<vtkPointPicker>::New();
-	pointPicker->SetTolerance(1e-4);
+	pointPicker->SetTolerance(1e-5);
 	renderWindowInteractor->SetPicker(pointPicker);
 
 	vtkSmartPointer<MouseInteractorStyle> style = vtkSmartPointer<MouseInteractorStyle>::New();
@@ -1474,6 +1555,9 @@ int main(int argc, char *argv[])
 	
 	style->isControlPoint = isControlPoint;
 	style->ControlPointCoord = ControlPointCoord;
+	style->RelatedTumorPids = RelatedTumorPids;
+
+	style->tumorPoly = tumorPoly;
 
 //	style->TumorSphereSource = TumorSphereSource;
 //	for (int l = 0; l < 3; l ++) style->TumorCenterIdx[l] = TumorCenterIdx[l];

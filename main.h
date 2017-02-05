@@ -41,7 +41,8 @@
 #include <vtkFloatArray.h>
 #include <vtkCleanPolyData.h>
 #include <vtkLoopSubdivisionFilter.h>
-
+#include <vtkTransform.h>
+#include <vtkTransformPolyDataFilter.h>
 
 #include <vtkPointPicker.h>
 #include <vtkLookupTable.h>
@@ -69,7 +70,7 @@ const double BorderForce = 1 / (0.75 * 0.75 * 0.75 * 0.75 * 0.75 * 0.75) - 1 / 0
 const int range = 5;
 
 #define CRADIUS 5.0
-#define N 1000
+#define N 1500
 
 class CForce
 {
