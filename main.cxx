@@ -63,15 +63,10 @@ public:
 		ControlPointCoord = vtkSmartPointer<vtkDoubleArray>::New();
 		RelaxShape = vtkSmartPointer<vtkPoints>::New();
 
-		pushballcenter[0] = 0.0;
-		pushballcenter[1] = 0.0;
-		pushballcenter[2] = 9.0;
-		pushballradius = 4.0;
-
 		LeftButtonDown = false;
 	}
 
-	~MouseInteractorStyle(){	}
+	~MouseInteractorStyle()	{}
 
 	bool InitialPointcloud()
 	{
@@ -227,7 +222,7 @@ public:
 					for (int l = 0; l < 3; l++) Fi[l] = 20.0 * Fi[l];
 				}
 				
-				if (isControlPoint->GetValue(i) != 2) // if it is not a tumor surface point
+				if (isControlPoint->GetValue(i) != 2) // if it is not a tumor center point
 				{
 					double coordi_new[3];
 					for (int l = 0; l < 3; l++) coordi_new[l] = coordi[l] + Fi[l] / POINTMASS * TIMESTEP;
@@ -242,12 +237,6 @@ public:
 			//double meanR = CRADIUS * CRADIUS / SamplePoints->GetNumberOfPoints();
 			for (int i = 0; i < SamplePoly->GetPoints()->GetNumberOfPoints(); i++)
 			{
-				if (isControlPoint->GetValue(i) == 2) // if this is a tumor surface point
-				{
-					R->SetValue(i, 0.1);
-					continue;
-				}
-
 				double Ri = R->GetValue(i);
 				double delta_Ri_Max = 3.0 * TIMESTEP;
 
@@ -279,6 +268,7 @@ public:
 
 		// draw the connections
 		connectionCellArray->Reset();
+		isTumorConnections->Reset();
 
 		for (vtkIdType i = 0; i < SamplePoly->GetPoints()->GetNumberOfPoints(); i++)
 		{
@@ -342,6 +332,11 @@ public:
 				line->GetPointIds()->SetId(0, i);
 				line->GetPointIds()->SetId(1, j);
 				connectionCellArray->InsertNextCell(line);
+				if (isControlPoint->GetValue(i) == 2 || isControlPoint->GetValue(j) == 2)
+					isTumorConnections->InsertNextValue(1);
+				else
+					isTumorConnections->InsertNextValue(0);
+
 			}
 
 		return true;
@@ -372,7 +367,7 @@ public:
 			vtkMath::Subtract(boundarycoord, coordi, dir_p2boundary);
 			double dis_p2boundary = vtkMath::Norm(dir_p2boundary);
 			
-			if (dis_p2boundary < 5e-1)
+			if (dis_p2boundary < 2e-1)
 			{
 				isControlPoint->SetValue(i, 1);
 				ControlPointCoord->SetTuple(i, boundarycoord);
@@ -493,6 +488,13 @@ public:
 				memcpy(&rot[1][0], &UVT[1][0], 3 * sizeof(double));
 				memcpy(&rot[2][0], &UVT[2][0], 3 * sizeof(double));
 
+				if (isControlPoint->GetValue(i) == 2) // if this is tumor center point
+				{
+					memcpy(&tumorRotate[0][0], &rot[0][0], 3 * sizeof(double));
+					memcpy(&tumorRotate[1][0], &rot[1][0], 3 * sizeof(double));
+					memcpy(&tumorRotate[2][0], &rot[2][0], 3 * sizeof(double));
+				}
+
 				double** RelaxShape_local_rot = new double*[Connections[i].size()];
 				for (unsigned int j = 0; j < Connections[i].size(); j++)
 				{
@@ -515,7 +517,7 @@ public:
 					vtkMath::Normalize(dir2goal);
 
 					double force_i2pid[3];
-					double force_i2pidnorm = 5.0 * dis2goal * dis2goal;
+					double force_i2pidnorm = 5.0 * dis2goal;
 					//force_i2pidnorm = force_i2pidnorm > 10.0 ? 10.0 : force_i2pidnorm;
 
 				//	if (isControlPoint->GetValue(i) == 1) // Surface point will have a much larger force to its connections
@@ -523,10 +525,10 @@ public:
 				//	if (isControlPoint->GetValue(i) == 2) // Jbar point will have a much larger force to its connections
 				//		force_i2pidnorm = 20.0 * force_i2pidnorm;
 
-					if (isControlPoint->GetValue(i) == 2 && isControlPoint->GetValue(pid) == 2) // forces betwwn two tumor points are strong
-					{
-						force_i2pidnorm = 10.0 * force_i2pidnorm;
-					}
+					//if (isControlPoint->GetValue(i) == 2 && isControlPoint->GetValue(pid) == 2) // forces betwwn two tumor points are strong
+					//{
+					//	force_i2pidnorm = 10.0 * force_i2pidnorm;
+					//}
 
 					for (int l = 0; l < 3; l++)	force_i2pid[l] = force_i2pidnorm * dir2goal[l];
 
@@ -613,10 +615,7 @@ public:
 					for (int l = 0; l < 3; l++)	Fi[l] = force_i2pidnorm * dir2goal[l];
 
 					double coordnew[3];
-					if (isControlPoint->GetValue(i) != 2)
-						for (int l = 0; l < 3; l++) coordnew[l] = CurrentCoord[l] + Fi[l] / POINTMASS * TIMESTEP;
-					else
-						for (int l = 0; l < 3; l++) coordnew[l] = CurrentCoord[l] + Fi[l] / 1.0 * TIMESTEP;
+					for (int l = 0; l < 3; l++) coordnew[l] = CurrentCoord[l] + Fi[l] / POINTMASS * TIMESTEP;
 
 					SamplePoly->GetPoints()->SetPoint(i, coordnew);
 				}
@@ -635,17 +634,38 @@ public:
 
 					double coordi[3];
 					SamplePoly->GetPoint(i, coordi);
-					for (int l = 0; l < 3; l++) coordi[l] = coordi[l] + Fi[l] / POINTMASS * TIMESTEP;
+					double movei[3];
+					for (int l = 0; l < 3; l++) movei[l] = Fi[l] / POINTMASS * TIMESTEP;
+					vtkMath::Add(coordi, movei, coordi);
 					SamplePoly->GetPoints()->SetPoint(i, coordi);
 
-					if (isControlPoint->GetValue(i) == 2) // if this is a tumor surface point
+					if (isControlPoint->GetValue(i) == 2) // if this is a tumor center point
 					{
-						vtkIdType relatedtumorpid = RelatedTumorPids.at(i);
-						tumorPoly->GetPoints()->SetPoint(relatedtumorpid, coordi);
+						vtkMath::Transpose3x3(tumorRotate, tumorRotate);
+						double R_new[3][3];
+						vtkMath::Multiply3x3(tumorRotate, tumorScaledRotate_benchmark, R_new);
+
+						double T_new[3];
+						for (int l = 0; l < 3; l++)
+						{
+							T_new[l] = coordi[l] - vtkMath::Dot(R_new[l], tumorCenter_benchmark);
+						}
+					
+						vtkMatrix4x4* m = tumorTransform->GetMatrix();
+						vtkSmartPointer<vtkMatrix4x4> newm = vtkSmartPointer<vtkMatrix4x4>::New();
+						for (int l = 0; l < 3; l++)
+							for (int k = 0; k < 3; k++)
+								newm->SetElement(l, k, R_new[l][k]);
+
+						for (int l = 0; l < 3; l++)	newm->SetElement(l, 3, T_new[l]);
+						for (int l = 0; l < 3; l++)	newm->SetElement(3, l, 0.0);
+						newm->SetElement(3, 3, 1.0);
+
+						tumorTransform->SetMatrix(newm);
+
 					}
 				}				
 			}
-
 		}
 	
 		return true;
@@ -704,7 +724,7 @@ public:
 		// build connections
 		this->Connections.clear();
 		connectionCellArray->Reset();
-		isSurfaceConnections->Reset();
+		isTumorConnections->Reset();
 
 		for (vtkIdType i = 0; i < SamplePoly->GetPoints()->GetNumberOfPoints(); i++)
 		{
@@ -807,9 +827,9 @@ public:
 				connectionCellArray->InsertNextCell(line);
 
 				if (isControlPoint->GetValue(i) == 1 && isControlPoint->GetValue(j) == 1)
-					isSurfaceConnections->InsertNextValue(1);
+					isTumorConnections->InsertNextValue(1);
 				else
-					isSurfaceConnections->InsertNextValue(0);
+					isTumorConnections->InsertNextValue(0);
 
 			}
 		}
@@ -845,7 +865,7 @@ public:
 		else if (key == "g")
 		{
 			forces.resize(SamplePoly->GetPoints()->GetNumberOfPoints());
-			for (int iter = 0; iter < 1; iter++)
+			for (int iter = 0; iter < 10; iter++)
 			{
 				DeformationMotion(1, -1);
 			}
@@ -860,11 +880,35 @@ public:
 			connectionCellArray->Modified();
 			connectionPolyData->Modified();
 			SamplePoly->Modified();
-			tumorPoly->Modified();
-
+			tumorTransformFilter->GetOutput()->Modified();
 			renderWindow->Render();
+		}
 
-			//	BuildRelationshipsParameters();
+		else if (key == "r")
+		{
+
+		}
+		else if (key == "t")
+		{
+			//vtkTransform* transform = vtkTransform::SafeDownCast(tumorTransformFilter->GetTransform());
+			//double* s = tumorTransform->GetScale();
+			//double* t = tumorTransform->GetPosition();
+			//double* r = tumorTransform->GetOrientation();
+			//std::cout << "scale = " << s[0] << ", " << s[1] << ", " << s[2] << std::endl;
+			//std::cout << "t = " << t[0] << ", " << t[1] << ", " << t[2] << std::endl;
+			//std::cout << "r = " << r[0] << ", " << r[1] << ", " << r[2] << std::endl;
+
+			vtkMatrix4x4* m = tumorTransform->GetMatrix();
+			vtkSmartPointer<vtkMatrix4x4> newm = vtkSmartPointer<vtkMatrix4x4>::New();
+			newm->DeepCopy(m);
+			newm->SetElement(0, 3, newm->GetElement(0, 3) + 0.05);
+			//std::cout << m->GetElement(0, 0) << ", " << m->GetElement(0, 1) << ", " << m->GetElement(0, 2) << ", " << m->GetElement(0, 3) << std::endl;
+			//std::cout << m->GetElement(1, 0) << ", " << m->GetElement(1, 1) << ", " << m->GetElement(1, 2) << ", " << m->GetElement(1, 3) << std::endl;
+			//std::cout << m->GetElement(2, 0) << ", " << m->GetElement(2, 1) << ", " << m->GetElement(2, 2) << ", " << m->GetElement(2, 3) << std::endl;
+			//std::cout << m->GetElement(3, 0) << ", " << m->GetElement(3, 1) << ", " << m->GetElement(3, 2) << ", " << m->GetElement(3, 3) << std::endl;
+			
+			tumorTransform->SetMatrix(newm);
+			renderWindow->Render();
 		}
 
 		else if (key == "z" || key == "x" || key == "i" || key == "k" || key == "j" || key == "l")
@@ -1162,7 +1206,6 @@ public:
 	vtkSmartPointer<vtkIdTypeArray> isControlPoint;
 	vtkSmartPointer<vtkDoubleArray> ControlPointCoord;
 	vector<vtkIdType> RelatedBoundaryPids;
-	vector<vtkIdType> RelatedTumorPids;
 
 	vector< vector<vtkIdType> > Connections;
 //	vector< vector<vtkIdType> > relationships; // each one has two points ids.
@@ -1171,11 +1214,7 @@ public:
 	
 	vtkPolyData* connectionPolyData;
 	vtkCellArray* connectionCellArray;
-	vtkIdTypeArray* isSurfaceConnections;
-
-	// 
-	double pushballcenter[3];
-	double pushballradius;
+	vtkIdTypeArray* isTumorConnections;
 
 	//
 	bool LeftButtonDown;
@@ -1189,10 +1228,13 @@ public:
 	double picksampledistance;
 	vtkIdType PickedSamplePID;
 
-	vtkSphereSource* TumorSphereSource;;
-	vtkIdType TumorCenterIdx[3];
-
-	vtkPolyData* tumorPoly;
+	vtkTransformPolyDataFilter* tumorTransformFilter;
+	vtkTransform* tumorTransform;
+	double tumorRotate[3][3];
+	
+	double tumorScaledRotate_benchmark[3][3];
+	double tumorTranslate_benchmark[3];
+	double tumorCenter_benchmark[3];
 };
 vtkStandardNewMacro(MouseInteractorStyle);
 
@@ -1297,7 +1339,6 @@ int main(int argc, char *argv[])
 	ControlPointCoord->SetNumberOfComponents(3);
 	ControlPointCoord->SetNumberOfTuples(SamplePoints->GetNumberOfPoints());
 
-	std::vector<vtkIdType> RelatedTumorPids;
 
 	for (int i = 0; i < N; )
 	{
@@ -1331,7 +1372,6 @@ int main(int argc, char *argv[])
 		isControlPoint->InsertNextValue(0);
 		double temp[3] = { 0.0, 0.0, 0.0 };
 		ControlPointCoord->InsertNextTuple(temp);
-		RelatedTumorPids.push_back(-1);
 		i ++;
 	}
 	
@@ -1343,14 +1383,12 @@ int main(int argc, char *argv[])
 	//	ControlPointCoord->InsertNextTuple(coord_jbar);
 	//}
 
-
 //	SavePolyData(SamplePoly, "C:\\work\\smooth_deformation_3D\\testdata\\SamplePoly.vtp");
 	
 	// insert tumor mesh model
 	vtkSmartPointer<vtkPolyData> tumorPoly = vtkSmartPointer<vtkPolyData>::New();
-	vtkSmartPointer<vtkTransform> tumortranslation = vtkSmartPointer<vtkTransform>::New();
+	vtkSmartPointer<vtkTransform> tumorTransform = vtkSmartPointer<vtkTransform>::New();
 	vtkSmartPointer<vtkTransformPolyDataFilter> tumorTransformFilter = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
-
 	{
 		vtkSmartPointer< vtkXMLPolyDataReader > tumorreader = vtkSmartPointer< vtkXMLPolyDataReader >::New();
 		tumorreader->SetFileName("C:\\work\\Lung_Models\\Tumor.vtp");
@@ -1376,29 +1414,31 @@ int main(int argc, char *argv[])
 		double tumorScaleX = tumorBounds[1] - tumorBounds[0];
 		double tumorScaleY = tumorBounds[3] - tumorBounds[2];
 		double tumorScaleZ = tumorBounds[5] - tumorBounds[4];
-		double tumorScale = vtkMath::Max(tumorScaleX, tumorScaleY);
-		tumorScale = vtkMath::Max(tumorScale, tumorScaleZ);
+		double tumorScale_Original = vtkMath::Max(tumorScaleX, tumorScaleY);
+		tumorScale_Original = vtkMath::Max(tumorScale_Original, tumorScaleZ);
 		double* tumorCenter = tumorPoly->GetCenter();
 
 		// change scale from tumorScale totumorgoalscale, change center from tumorCenter to [0,0,0]
 		const double tumorgoalscale = 1.0;
-		tumortranslation->Scale(tumorgoalscale / tumorScale, tumorgoalscale / tumorScale, tumorgoalscale / tumorScale);
-		tumortranslation->Translate(10.0-tumorCenter[0], -tumorCenter[1], 25.0-tumorCenter[2]);
+		tumorTransform->Scale(tumorgoalscale / tumorScale_Original, tumorgoalscale / tumorScale_Original, tumorgoalscale / tumorScale_Original);
+		tumorTransform->Translate(15.0 - tumorCenter[0], 20.0 - tumorCenter[1], 30.0 - tumorCenter[2]);
+		
+		//vtkMatrix4x4* m = tumorTransform->GetMatrix();
+		//std::cout << m->GetElement(0, 0) << ", " << m->GetElement(0, 1) << ", " << m->GetElement(0, 2) << ", " << m->GetElement(0, 3) << std::endl;
+		//std::cout << m->GetElement(1, 0) << ", " << m->GetElement(1, 1) << ", " << m->GetElement(1, 2) << ", " << m->GetElement(1, 3) << std::endl;
+		//std::cout << m->GetElement(2, 0) << ", " << m->GetElement(2, 1) << ", " << m->GetElement(2, 2) << ", " << m->GetElement(2, 3) << std::endl;
+		//std::cout << m->GetElement(3, 0) << ", " << m->GetElement(3, 1) << ", " << m->GetElement(3, 2) << ", " << m->GetElement(3, 3) << std::endl;
+		
 		tumorTransformFilter->SetInputData(tumorPoly);
-		tumorTransformFilter->SetTransform(tumortranslation);
+		tumorTransformFilter->SetTransform(tumorTransform);
 		tumorTransformFilter->Update();
-		tumorPoly = tumorTransformFilter->GetOutput();
+		tumorCenter = tumorTransformFilter->GetOutput()->GetCenter();
 
 	//	SavePolyData(tumorTransformFilter->GetOutput(), "C:\\work\\smooth_deformation_3D\\testdata\\tumorTransformFilter.vtp");
-		
-		for (vtkIdType i = 0; i < tumorPoly->GetPoints()->GetNumberOfPoints(); i++)
 		{
-			double coordi[3];
-			tumorPoly->GetPoint(i, coordi);
-			SamplePoints->InsertNextPoint(coordi);
+			SamplePoints->InsertNextPoint(tumorCenter);
 			isControlPoint->InsertNextValue(2);
-			ControlPointCoord->InsertNextTuple(coordi);
-			RelatedTumorPids.push_back(i);
+			ControlPointCoord->InsertNextTuple(tumorCenter);
 		}
 	}
 
@@ -1415,7 +1455,7 @@ int main(int argc, char *argv[])
 	lookupTable->SetScaleToLinear();
 	lookupTable->SetTableValue(0, 1.0, 0.0, 0.0, 1); 
 	lookupTable->SetTableValue(1, 0.0, 0.0, 1.0, 1); 
-	lookupTable->SetTableValue(2, 0.0, 1.0, 0.0, 1); 
+	lookupTable->SetTableValue(2, 0.0, 0.0, 0.0, 1); 
 	lookupTable->Build();
 
 	vtkSmartPointer<vtkPointLocator> pointLocator = vtkSmartPointer<vtkPointLocator>::New();
@@ -1450,17 +1490,17 @@ int main(int argc, char *argv[])
 	vtkSmartPointer<vtkPolyData> connectionPolyData = vtkSmartPointer<vtkPolyData>::New();
 	connectionPolyData->SetPoints(SamplePoints);
 	connectionPolyData->SetLines(connectionCellArray);
-//	vtkSmartPointer<vtkIdTypeArray> isSurfaceConnections = vtkSmartPointer<vtkIdTypeArray>::New();
-//	connectionPolyData->GetCellData()->SetScalars(isSurfaceConnections);
+	vtkSmartPointer<vtkIdTypeArray> isTumorConnections = vtkSmartPointer<vtkIdTypeArray>::New();
+	connectionPolyData->GetCellData()->SetScalars(isTumorConnections);
 
 	// add connections color lookup table
-	//vtkSmartPointer<vtkLookupTable> connectionslookupTable = vtkSmartPointer<vtkLookupTable>::New();
-	//connectionslookupTable->SetNumberOfTableValues(2);
-	//connectionslookupTable->SetRange(0.0, 1.0);
-	//connectionslookupTable->SetScaleToLinear();
-	//connectionslookupTable->SetTableValue(0, 0.0, 1.0, 0.0, 1);
-	//connectionslookupTable->SetTableValue(1, 0.0, 0.0, 1.0, 1);
-	//connectionslookupTable->Build();
+	vtkSmartPointer<vtkLookupTable> connectionslookupTable = vtkSmartPointer<vtkLookupTable>::New();
+	connectionslookupTable->SetNumberOfTableValues(2);
+	connectionslookupTable->SetRange(0.0, 1.0);
+	connectionslookupTable->SetScaleToLinear();
+	connectionslookupTable->SetTableValue(0, 0.0, 1.0, 0.0, 1);
+	connectionslookupTable->SetTableValue(1, 0.0, 0.0, 0.0, 1);
+	connectionslookupTable->Build();
 
 	// Render window
 	vtkSmartPointer<vtkRenderWindow> renderWindow =	vtkSmartPointer<vtkRenderWindow>::New();
@@ -1495,8 +1535,8 @@ int main(int argc, char *argv[])
 	// the connections
 	vtkSmartPointer<vtkPolyDataMapper> mapper2 = vtkSmartPointer<vtkPolyDataMapper>::New(); 
 	mapper2->SetInputData(connectionPolyData);
-	//mapper2->SetScalarRange(0.0, 1.0);
-	//mapper2->SetLookupTable(connectionslookupTable);
+	mapper2->SetScalarRange(0.0, 1.0);
+	mapper2->SetLookupTable(connectionslookupTable);
 	vtkSmartPointer<vtkActor> actor2 = vtkSmartPointer<vtkActor>::New();
 	actor2->SetMapper(mapper2);
 	actor2->GetProperty()->SetColor(0.0, 1.0, 0.0); //(R,G,B)
@@ -1517,11 +1557,11 @@ int main(int argc, char *argv[])
 	//TumorSphereSource->Update();
 
 	vtkSmartPointer<vtkPolyDataMapper> mapper_tumor = vtkSmartPointer<vtkPolyDataMapper>::New(); // the tumor sphere
-	mapper_tumor->SetInputData(tumorPoly);
+	mapper_tumor->SetInputConnection(tumorTransformFilter->GetOutputPort());
 	vtkSmartPointer<vtkActor> actor_tumor = vtkSmartPointer<vtkActor>::New();
 	actor_tumor->SetMapper(mapper_tumor);
 	actor_tumor->GetProperty()->SetColor(0.0, 1.0, 0.0); //(R,G,B)
-	//	actor_tumor->GetProperty()->SetOpacity(0.5);
+	actor_tumor->GetProperty()->SetOpacity(0.8);
 	renderer->AddActor(actor_tumor);
 
 
@@ -1551,17 +1591,23 @@ int main(int argc, char *argv[])
 
 	style->connectionPolyData = connectionPolyData;
 	style->connectionCellArray = connectionCellArray;
-//	style->isSurfaceConnections = isSurfaceConnections;
+	style->isTumorConnections = isTumorConnections;
 	
 	style->isControlPoint = isControlPoint;
 	style->ControlPointCoord = ControlPointCoord;
-	style->RelatedTumorPids = RelatedTumorPids;
 
-	style->tumorPoly = tumorPoly;
+	style->tumorTransform = tumorTransform;
+	style->tumorTransformFilter = tumorTransformFilter;
 
-//	style->TumorSphereSource = TumorSphereSource;
-//	for (int l = 0; l < 3; l ++) style->TumorCenterIdx[l] = TumorCenterIdx[l];
+	vtkMatrix4x4* m = tumorTransform->GetMatrix();
+	for (int l = 0; l < 3; l++)
+		for (int k = 0; k < 3; k++)
+			style->tumorScaledRotate_benchmark[l][k] = m->GetElement(l, k);
 
+	for (int l = 0; l < 3; l++) style->tumorTranslate_benchmark[l] = m->GetElement(l, 3);
+	for (int l = 0; l < 3; l++) style->tumorCenter_benchmark[l] = tumorPoly->GetCenter()[l];
+
+//	std::cout << "tumorCenter_benchmark = " << style->tumorCenter_benchmark[0] << ", " << style->tumorCenter_benchmark[1] << ", " << style->tumorCenter_benchmark[2] << std::endl;
 
 	style->renderWindow = renderWindow;
 	style->ClickCount = 0;
