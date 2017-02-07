@@ -222,7 +222,8 @@ public:
 					for (int l = 0; l < 3; l++) Fi[l] = 20.0 * Fi[l];
 				}
 				
-				if (isControlPoint->GetValue(i) != 2) // if it is not a tumor center point
+				if (isControlPoint->GetValue(i) != 2  // if it is not a tumor center point
+					&& isControlPoint->GetValue(i) != 3) // if it is not a Jbar 
 				{
 					double coordi_new[3];
 					for (int l = 0; l < 3; l++) coordi_new[l] = coordi[l] + Fi[l] / POINTMASS * TIMESTEP;
@@ -297,11 +298,24 @@ public:
 				double Rj = R->GetValue(j);
 				double R_total = Ri + Rj;
 
-				if (dis < 0.60 * R_total)
+				if (dis < 0.90 * R_total)
 					Connection_i.push_back(j);
 			}
 
 			this->Connections.push_back(Connection_i);
+		}
+
+		// make sure tumor and Jbar have connection
+		for (vtkIdType i = 0; i < SamplePoly->GetPoints()->GetNumberOfPoints(); i++)
+		{
+			if (isControlPoint->GetValue(i) == 2)
+			{
+				for (vtkIdType j = i + 1; j < SamplePoly->GetPoints()->GetNumberOfPoints(); j++)
+				{
+					if (isControlPoint->GetValue(j) == 3)
+						this->Connections.at(i).push_back(j);
+				}
+			}
 		}
 
 		// refine connections
@@ -332,6 +346,13 @@ public:
 				line->GetPointIds()->SetId(0, i);
 				line->GetPointIds()->SetId(1, j);
 				connectionCellArray->InsertNextCell(line);
+				//if (isControlPoint->GetValue(i) == 2 && isControlPoint->GetValue(j) == 3
+				//	|| isControlPoint->GetValue(i) == 3 && isControlPoint->GetValue(j) == 2)
+				//{
+				//	isTumorConnections->InsertNextValue(2);
+				//	continue;
+				//}
+
 				if (isControlPoint->GetValue(i) == 2 || isControlPoint->GetValue(j) == 2)
 					isTumorConnections->InsertNextValue(1);
 				else
@@ -348,7 +369,8 @@ public:
 
 		for (vtkIdType i = 0; i < SamplePoly->GetPoints()->GetNumberOfPoints(); i++)
 		{
-			if (isControlPoint->GetValue(i) == 2) // if i is a J-bar control point
+			if (isControlPoint->GetValue(i) == 2   // if i is a tumor control point
+				|| isControlPoint->GetValue(i) == 3) // if i is a J-bar control point
 			{				
 			//	double tempcoord[3] = { Jbarx, Jbary, Jbarz };
 			//	isControlPoint->SetValue(i, 2);
@@ -525,10 +547,11 @@ public:
 				//	if (isControlPoint->GetValue(i) == 2) // Jbar point will have a much larger force to its connections
 				//		force_i2pidnorm = 20.0 * force_i2pidnorm;
 
-					//if (isControlPoint->GetValue(i) == 2 && isControlPoint->GetValue(pid) == 2) // forces betwwn two tumor points are strong
-					//{
-					//	force_i2pidnorm = 10.0 * force_i2pidnorm;
-					//}
+					if (isControlPoint->GetValue(i) == 2 && isControlPoint->GetValue(pid) == 3
+						|| isControlPoint->GetValue(i) == 3 && isControlPoint->GetValue(pid) == 2) // forces between tumor and Jbar
+					{
+						force_i2pidnorm = 10.0 * force_i2pidnorm;
+					}
 
 					for (int l = 0; l < 3; l++)	force_i2pid[l] = force_i2pidnorm * dir2goal[l];
 
@@ -610,7 +633,7 @@ public:
 					vtkMath::Normalize(dir2goal);
 
 					double Fi[3];
-					double force_i2pidnorm = 50 * dis2goal;
+					double force_i2pidnorm = 20 * dis2goal;
 				//	force_i2pidnorm = force_i2pidnorm > 50.0 ? 50.0 : force_i2pidnorm;
 					for (int l = 0; l < 3; l++)	Fi[l] = force_i2pidnorm * dir2goal[l];
 
@@ -618,6 +641,12 @@ public:
 					for (int l = 0; l < 3; l++) coordnew[l] = CurrentCoord[l] + Fi[l] / POINTMASS * TIMESTEP;
 
 					SamplePoly->GetPoints()->SetPoint(i, coordnew);
+
+					if (isControlPoint->GetValue(i) == 3) // if this is a J-bar center point
+					{
+						JbarsphereSource->SetCenter(coordnew);
+						JbarsphereSource->Update();
+					}
 				}
 				else
 				{
@@ -663,6 +692,11 @@ public:
 
 						tumorTransform->SetMatrix(newm);
 
+					}
+					else if (isControlPoint->GetValue(i) == 3) // if this is a J-bar center point
+					{
+						JbarsphereSource->SetCenter(coordi);
+						JbarsphereSource->Update();
 					}
 				}				
 			}
@@ -884,38 +918,11 @@ public:
 			renderWindow->Render();
 		}
 
-		else if (key == "r")
-		{
-
-		}
-		else if (key == "t")
-		{
-			//vtkTransform* transform = vtkTransform::SafeDownCast(tumorTransformFilter->GetTransform());
-			//double* s = tumorTransform->GetScale();
-			//double* t = tumorTransform->GetPosition();
-			//double* r = tumorTransform->GetOrientation();
-			//std::cout << "scale = " << s[0] << ", " << s[1] << ", " << s[2] << std::endl;
-			//std::cout << "t = " << t[0] << ", " << t[1] << ", " << t[2] << std::endl;
-			//std::cout << "r = " << r[0] << ", " << r[1] << ", " << r[2] << std::endl;
-
-			vtkMatrix4x4* m = tumorTransform->GetMatrix();
-			vtkSmartPointer<vtkMatrix4x4> newm = vtkSmartPointer<vtkMatrix4x4>::New();
-			newm->DeepCopy(m);
-			newm->SetElement(0, 3, newm->GetElement(0, 3) + 0.05);
-			//std::cout << m->GetElement(0, 0) << ", " << m->GetElement(0, 1) << ", " << m->GetElement(0, 2) << ", " << m->GetElement(0, 3) << std::endl;
-			//std::cout << m->GetElement(1, 0) << ", " << m->GetElement(1, 1) << ", " << m->GetElement(1, 2) << ", " << m->GetElement(1, 3) << std::endl;
-			//std::cout << m->GetElement(2, 0) << ", " << m->GetElement(2, 1) << ", " << m->GetElement(2, 2) << ", " << m->GetElement(2, 3) << std::endl;
-			//std::cout << m->GetElement(3, 0) << ", " << m->GetElement(3, 1) << ", " << m->GetElement(3, 2) << ", " << m->GetElement(3, 3) << std::endl;
-			
-			tumorTransform->SetMatrix(newm);
-			renderWindow->Render();
-		}
-
 		else if (key == "z" || key == "x" || key == "i" || key == "k" || key == "j" || key == "l")
 		{
 			for (int i = 0; i < SamplePoly->GetPoints()->GetNumberOfPoints(); i++)
 			{
-				if (isControlPoint->GetValue(i) == 2)
+				if (isControlPoint->GetValue(i) == 3)
 				{
 					double coordjbar[3];
 					SamplePoly->GetPoint(i, coordjbar);
@@ -940,13 +947,15 @@ public:
 			forces.resize(SamplePoly->GetPoints()->GetNumberOfPoints());
 			for (int iter = 0; iter < 5; iter++)
 			{
-				DeformationMotion(1, 2);
+				DeformationMotion(1, 3);
 			}
+
 			connectionCellArray->Modified();
 			connectionPolyData->Modified();
 			SamplePoly->Modified();
+			//JbarsphereSource->;
+			tumorTransformFilter->GetOutput()->Modified();
 			renderWindow->Render();
-
 		}
 
 		else if (key == "Left" || key == "Right")
@@ -1235,6 +1244,8 @@ public:
 	double tumorScaledRotate_benchmark[3][3];
 	double tumorTranslate_benchmark[3];
 	double tumorCenter_benchmark[3];
+
+	vtkSphereSource* JbarsphereSource;
 };
 vtkStandardNewMacro(MouseInteractorStyle);
 
@@ -1375,13 +1386,6 @@ int main(int argc, char *argv[])
 		i ++;
 	}
 	
-	//// insert the J-bar 
-	//{
-	//	double coord_jbar[3] = { Jbarx, Jbary, Jbarz };
-	//	SamplePoints->InsertNextPoint(coord_jbar);
-	//	isControlPoint->InsertNextValue(2);
-	//	ControlPointCoord->InsertNextTuple(coord_jbar);
-	//}
 
 //	SavePolyData(SamplePoly, "C:\\work\\smooth_deformation_3D\\testdata\\SamplePoly.vtp");
 	
@@ -1421,7 +1425,7 @@ int main(int argc, char *argv[])
 		// change scale from tumorScale totumorgoalscale, change center from tumorCenter to [0,0,0]
 		const double tumorgoalscale = 1.0;
 		tumorTransform->Scale(tumorgoalscale / tumorScale_Original, tumorgoalscale / tumorScale_Original, tumorgoalscale / tumorScale_Original);
-		tumorTransform->Translate(15.0 - tumorCenter[0], 20.0 - tumorCenter[1], 30.0 - tumorCenter[2]);
+		tumorTransform->Translate(15.0 - tumorCenter[0], 15.0 - tumorCenter[1], 35.0 - tumorCenter[2]);
 		
 		//vtkMatrix4x4* m = tumorTransform->GetMatrix();
 		//std::cout << m->GetElement(0, 0) << ", " << m->GetElement(0, 1) << ", " << m->GetElement(0, 2) << ", " << m->GetElement(0, 3) << std::endl;
@@ -1442,6 +1446,22 @@ int main(int argc, char *argv[])
 		}
 	}
 
+	// insert the J-bar 
+	vtkSmartPointer<vtkSphereSource> JbarsphereSource = vtkSmartPointer<vtkSphereSource>::New();
+	{
+		double* tumorCenter = tumorTransformFilter->GetOutput()->GetCenter();
+		double coord_jbar[3] = { tumorCenter[0] + 0.5, tumorCenter[1] - 0.5, tumorCenter[2]};
+		SamplePoints->InsertNextPoint(coord_jbar);
+		isControlPoint->InsertNextValue(3);
+		ControlPointCoord->InsertNextTuple(coord_jbar);
+
+		JbarsphereSource->SetCenter(coord_jbar);
+		JbarsphereSource->SetRadius(0.2);
+		JbarsphereSource->SetPhiResolution(6);
+		JbarsphereSource->SetThetaResolution(6);
+		JbarsphereSource->Update();
+	}
+
 	for (vtkIdType i = 0; i < SamplePoints->GetNumberOfPoints(); i++)
 	{
 		SampleCell->InsertNextCell(1, &i);
@@ -1450,12 +1470,13 @@ int main(int argc, char *argv[])
 	// add color lookup table
 	SamplePoly->GetCellData()->SetScalars(isControlPoint);
 	vtkSmartPointer<vtkLookupTable> lookupTable = vtkSmartPointer<vtkLookupTable>::New();
-	lookupTable->SetNumberOfTableValues(3);
-	lookupTable->SetRange(0.0, 2.0);
+	lookupTable->SetNumberOfTableValues(4);
+	lookupTable->SetRange(0.0, 3.0);
 	lookupTable->SetScaleToLinear();
 	lookupTable->SetTableValue(0, 1.0, 0.0, 0.0, 1); 
 	lookupTable->SetTableValue(1, 0.0, 0.0, 1.0, 1); 
-	lookupTable->SetTableValue(2, 0.0, 0.0, 0.0, 1); 
+	lookupTable->SetTableValue(2, 0.0, 0.0, 0.0, 1);
+	lookupTable->SetTableValue(3, 1.0, 0.0, 1.0, 1);
 	lookupTable->Build();
 
 	vtkSmartPointer<vtkPointLocator> pointLocator = vtkSmartPointer<vtkPointLocator>::New();
@@ -1495,11 +1516,12 @@ int main(int argc, char *argv[])
 
 	// add connections color lookup table
 	vtkSmartPointer<vtkLookupTable> connectionslookupTable = vtkSmartPointer<vtkLookupTable>::New();
-	connectionslookupTable->SetNumberOfTableValues(2);
-	connectionslookupTable->SetRange(0.0, 1.0);
+	connectionslookupTable->SetNumberOfTableValues(3);
+	connectionslookupTable->SetRange(0.0, 2.0);
 	connectionslookupTable->SetScaleToLinear();
 	connectionslookupTable->SetTableValue(0, 0.0, 1.0, 0.0, 1);
 	connectionslookupTable->SetTableValue(1, 0.0, 0.0, 0.0, 1);
+	connectionslookupTable->SetTableValue(2, 1.0, 1.0, 0.0, 1);
 	connectionslookupTable->Build();
 
 	// Render window
@@ -1513,7 +1535,7 @@ int main(int argc, char *argv[])
 	renderer->SetViewport(static_cast<double>(0)/1,0,static_cast<double>(0+1)/1,1);
 	vtkSmartPointer<vtkPolyDataMapper> mapper =	vtkSmartPointer<vtkPolyDataMapper>::New();
 	mapper->SetInputData(SamplePoly); 
-	mapper->SetScalarRange(0.0, 2.0);
+	mapper->SetScalarRange(0.0, 3.0);
 	mapper->SetLookupTable(lookupTable);
 	vtkSmartPointer<vtkActor> actor = vtkSmartPointer<vtkActor>::New();
 	actor->SetMapper(mapper);
@@ -1535,7 +1557,7 @@ int main(int argc, char *argv[])
 	// the connections
 	vtkSmartPointer<vtkPolyDataMapper> mapper2 = vtkSmartPointer<vtkPolyDataMapper>::New(); 
 	mapper2->SetInputData(connectionPolyData);
-	mapper2->SetScalarRange(0.0, 1.0);
+	mapper2->SetScalarRange(0.0, 2.0);
 	mapper2->SetLookupTable(connectionslookupTable);
 	vtkSmartPointer<vtkActor> actor2 = vtkSmartPointer<vtkActor>::New();
 	actor2->SetMapper(mapper2);
@@ -1545,24 +1567,23 @@ int main(int argc, char *argv[])
 	renderer->AddActor(actor2);
 
 
-	// insert a sphere to represent the tumor
-	//vtkSmartPointer<vtkSphereSource> TumorSphereSource = vtkSmartPointer<vtkSphereSource>::New();
-	//vtkIdType TumorCenterIdx[3] = { 0.4 * DPts, 0.5 * DPts, 0.15 * DPts };
-	//double TuberCenterCoord[3];
-	//SamplePoly->GetPoint(TumorCenterIdx[0] * DPts * DPts + TumorCenterIdx[1] * DPts + TumorCenterIdx[2], TuberCenterCoord);
-	//TumorSphereSource->SetCenter(TuberCenterCoord);
-	//TumorSphereSource->SetRadius(0.5);
-	//TumorSphereSource->SetPhiResolution(12);
-	//TumorSphereSource->SetThetaResolution(12);
-	//TumorSphereSource->Update();
-
+	// tumor model
 	vtkSmartPointer<vtkPolyDataMapper> mapper_tumor = vtkSmartPointer<vtkPolyDataMapper>::New(); // the tumor sphere
 	mapper_tumor->SetInputConnection(tumorTransformFilter->GetOutputPort());
 	vtkSmartPointer<vtkActor> actor_tumor = vtkSmartPointer<vtkActor>::New();
 	actor_tumor->SetMapper(mapper_tumor);
 	actor_tumor->GetProperty()->SetColor(0.0, 1.0, 0.0); //(R,G,B)
-	actor_tumor->GetProperty()->SetOpacity(0.8);
+	actor_tumor->GetProperty()->SetOpacity(1.0);
 	renderer->AddActor(actor_tumor);
+
+	// J-bar
+	vtkSmartPointer<vtkPolyDataMapper> mapper_Jbar = vtkSmartPointer<vtkPolyDataMapper>::New(); // the tumor sphere
+	mapper_Jbar->SetInputConnection(JbarsphereSource->GetOutputPort());
+	vtkSmartPointer<vtkActor> actor_Jbar = vtkSmartPointer<vtkActor>::New();
+	actor_Jbar->SetMapper(mapper_Jbar);
+	actor_Jbar->GetProperty()->SetColor(1.0, 1.0, 0.0); //(R,G,B)
+	actor_Jbar->GetProperty()->SetOpacity(1.0);
+	renderer->AddActor(actor_Jbar);
 
 
 	renderer->SetBackground(1.0, 1.0, 1.0);
@@ -1571,6 +1592,15 @@ int main(int argc, char *argv[])
 	renderer->ResetCamera();
 	renderWindow->Render();
 	renderWindow->SetWindowName("Show Smoothed Points");
+
+	vtkSmartPointer<vtkAxesActor> axes = vtkSmartPointer<vtkAxesActor>::New();
+	vtkSmartPointer<vtkOrientationMarkerWidget> axeswidget = vtkSmartPointer<vtkOrientationMarkerWidget>::New();
+	axeswidget->SetOutlineColor(0.9300, 0.5700, 0.1300);
+	axeswidget->SetOrientationMarker(axes);
+	axeswidget->SetInteractor(renderWindowInteractor);
+	axeswidget->SetViewport(0.0, 0.0, 0.4, 0.4);
+	axeswidget->SetEnabled(1);
+	axeswidget->InteractiveOff();
 
 	vtkSmartPointer<vtkPointPicker> pointPicker = vtkSmartPointer<vtkPointPicker>::New();
 	pointPicker->SetTolerance(1e-5);
@@ -1598,6 +1628,8 @@ int main(int argc, char *argv[])
 
 	style->tumorTransform = tumorTransform;
 	style->tumorTransformFilter = tumorTransformFilter;
+	
+	style->JbarsphereSource = JbarsphereSource;
 
 	vtkMatrix4x4* m = tumorTransform->GetMatrix();
 	for (int l = 0; l < 3; l++)

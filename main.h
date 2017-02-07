@@ -47,7 +47,8 @@
 #include <vtkPointPicker.h>
 #include <vtkLookupTable.h>
 #include <vtkCubeSource.h>
-
+#include <vtkAxesActor.h>
+#include <vtkOrientationMarkerWidget.h>
 
 using namespace std;
 
