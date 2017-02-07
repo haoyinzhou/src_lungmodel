@@ -447,7 +447,7 @@ public:
 
 					RelaxShape->GetPoint(Connections[i][j], RelaxCoord);
 					SamplePoints->GetPoint(Connections[i][j], CurrentCoord);
-
+					
 					vtkMath::Subtract(RelaxCoord, RelaxCenter, RelaxCoord);
 					vtkMath::Subtract(CurrentCoord, CurrentCenter, CurrentCoord);
 					
@@ -460,6 +460,8 @@ public:
 						CurrentShape_local[j][l] = CurrentCoord[l];
 					}
 				}
+
+
 
 				// add a syn rotation
 				//double** rot = new double*[3];
@@ -550,7 +552,7 @@ public:
 					if (isControlPoint->GetValue(i) == 2 && isControlPoint->GetValue(pid) == 3
 						|| isControlPoint->GetValue(i) == 3 && isControlPoint->GetValue(pid) == 2) // forces between tumor and Jbar
 					{
-						force_i2pidnorm = 10.0 * force_i2pidnorm;
+						force_i2pidnorm = 1.0 * force_i2pidnorm;
 					}
 
 					for (int l = 0; l < 3; l++)	force_i2pid[l] = force_i2pidnorm * dir2goal[l];
@@ -945,7 +947,7 @@ public:
 			}
 
 			forces.resize(SamplePoly->GetPoints()->GetNumberOfPoints());
-			for (int iter = 0; iter < 5; iter++)
+			for (int iter = 0; iter < 8; iter++)
 			{
 				DeformationMotion(1, 3);
 			}
@@ -1541,7 +1543,7 @@ int main(int argc, char *argv[])
 	actor->SetMapper(mapper);
 	actor->GetProperty()->SetColor(1.0, 0.0, 0.0); //(R,G,B)
 	actor->GetProperty()->SetPointSize(5.0);
-	renderer->AddActor(actor);
+//	renderer->AddActor(actor);
 
 	// the boundary lung model
 	vtkSmartPointer<vtkPolyDataMapper> mapper1 = vtkSmartPointer<vtkPolyDataMapper>::New();
@@ -1562,7 +1564,7 @@ int main(int argc, char *argv[])
 	vtkSmartPointer<vtkActor> actor2 = vtkSmartPointer<vtkActor>::New();
 	actor2->SetMapper(mapper2);
 	actor2->GetProperty()->SetColor(0.0, 1.0, 0.0); //(R,G,B)
-	actor2->GetProperty()->SetLineWidth(0.5);
+	actor2->GetProperty()->SetLineWidth(0.3);
 //	actor2->GetProperty()->SetOpacity(0.5);
 	renderer->AddActor(actor2);
 
